@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit
 
 @MainThread
 class MusicService : HeadlessJsTaskService() {
-    private lateinit var player: QueuedAudioPlayer
+    private var player: QueuedAudioPlayer? = null
     private val binder = MusicBinder()
     private val scope = MainScope()
     private var progressUpdateJob: Job? = null
@@ -40,18 +40,18 @@ class MusicService : HeadlessJsTaskService() {
         private set
 
     val tracks: List<Track>
-        get() = player.items.map { (it as TrackAudioItem).track }
+        get() = (player?.items ?: emptyList()).map { (it as TrackAudioItem).track }
 
     val currentTrack
-        get() = (player.currentItem as TrackAudioItem).track
+        get() = (player?.currentItem as TrackAudioItem).track
 
     var ratingType: Int
-        get() = player.ratingType
+        get() = player?.ratingType ?: 0
         set(value) {
-            player.ratingType = value
+            player?.ratingType = value
         }
 
-    val event get() = player.event
+    val event get() = player?.event
 
     private var latestOptions: Bundle? = null
     private var capabilities: List<Capability> = emptyList()
@@ -79,7 +79,7 @@ class MusicService : HeadlessJsTaskService() {
         val automaticallyUpdateNotificationMetadata = playerOptions?.getBoolean(AUTO_UPDATE_METADATA, true) ?: true
 
         player = QueuedAudioPlayer(this@MusicService, bufferOptions, cacheOptions)
-        player.automaticallyUpdateNotificationMetadata = automaticallyUpdateNotificationMetadata
+        player?.automaticallyUpdateNotificationMetadata = automaticallyUpdateNotificationMetadata
         observeEvents()
     }
 
@@ -90,7 +90,7 @@ class MusicService : HeadlessJsTaskService() {
 
         ratingType = Utils.getInt(options, "ratingType", RatingCompat.RATING_NONE)
 
-        player.playerOptions.alwaysPauseOnInterruption = options.getBoolean(PAUSE_ON_INTERRUPTION_KEY)
+        player?.playerOptions?.alwaysPauseOnInterruption = options.getBoolean(PAUSE_ON_INTERRUPTION_KEY)
 
         capabilities = options.getIntegerArrayList("capabilities")?.map { Capability.values()[it] } ?: emptyList()
         notificationCapabilities = options.getIntegerArrayList("notificationCapabilities")?.map { Capability.values()[it] } ?: emptyList()
@@ -143,7 +143,7 @@ class MusicService : HeadlessJsTaskService() {
         val pendingIntent = PendingIntent.getActivity(this, 0, openAppIntent, getPendingIntentFlags())
         val notificationConfig = NotificationConfig(buttonsList, accentColor, smallIcon, pendingIntent)
 
-        player.notificationManager.createNotification(notificationConfig)
+        player?.notificationManager?.createNotification(notificationConfig)
 
         // setup progress update events if configured
         progressUpdateJob?.cancel()
@@ -158,7 +158,7 @@ class MusicService : HeadlessJsTaskService() {
     @MainThread
     private fun progressUpdateEventFlow(interval: Long) = flow {
         while (true) {
-            if (player.isPlaying) {
+            if (player?.isPlaying == true) {
                 val bundle = progressUpdateEvent()
                 emit(bundle)
             }
@@ -171,10 +171,10 @@ class MusicService : HeadlessJsTaskService() {
     private suspend fun progressUpdateEvent(): Bundle {
         return withContext(Dispatchers.Main) {
             Bundle().apply {
-                putDouble(POSITION_KEY, player.position.toSeconds())
-                putDouble(DURATION_KEY, player.duration.toSeconds())
-                putDouble(BUFFERED_POSITION_KEY, player.bufferedPosition.toSeconds())
-                putInt(TRACK_KEY, player.currentIndex)
+                putDouble(POSITION_KEY, player?.position?.toSeconds() ?: 0.0)
+                putDouble(DURATION_KEY, player?.duration?.toSeconds() ?: 0.0)
+                putDouble(BUFFERED_POSITION_KEY, player?.bufferedPosition?.toSeconds() ?: 0.0)
+                putInt(TRACK_KEY, player?.currentIndex ?: 0)
             }
         }
     }
@@ -199,13 +199,13 @@ class MusicService : HeadlessJsTaskService() {
     @MainThread
     fun add(tracks: List<Track>) {
         val items = tracks.map { it.toAudioItem() }
-        player.add(items, false)
+        player?.add(items, false)
     }
 
     @MainThread
     fun add(tracks: List<Track>, atIndex: Int) {
         val items = tracks.map { it.toAudioItem() }
-        player.add(items, atIndex)
+        player?.add(items, atIndex)
     }
 
     @MainThread
@@ -215,117 +215,117 @@ class MusicService : HeadlessJsTaskService() {
 
     @MainThread
     fun remove(indexes: List<Int>) {
-        player.remove(indexes)
+        player?.remove(indexes)
     }
 
     @MainThread
     fun play() {
-        player.play()
+        player?.play()
     }
 
     @MainThread
     fun pause() {
-        player.pause()
+        player?.pause()
     }
 
     @MainThread
     fun stopPlayer() {
-        player.stop()
+        player?.stop()
     }
 
     @MainThread
     fun removeUpcomingTracks() {
-        player.removeUpcomingItems()
+        player?.removeUpcomingItems()
     }
 
     @MainThread
     fun removePreviousTracks() {
-        player.removePreviousItems()
+        player?.removePreviousItems()
     }
 
     @MainThread
     fun skip(index: Int) {
-        player.jumpToItem(index, player.isPlaying)
+        player?.jumpToItem(index, player?.isPlaying ?: false)
     }
 
     @MainThread
     fun skipToNext() {
-        player.next()
+        player?.next()
     }
 
     @MainThread
     fun skipToPrevious() {
-        player.previous()
+        player?.previous()
     }
 
     @MainThread
     fun seekTo(seconds: Float) {
-        player.seek((seconds.toMilliseconds()), TimeUnit.MILLISECONDS)
+        player?.seek((seconds.toMilliseconds()), TimeUnit.MILLISECONDS)
     }
 
     @MainThread
-    fun getCurrentTrackIndex(): Int = player.currentIndex
+    fun getCurrentTrackIndex(): Int = player?.currentIndex ?: 0
 
     @MainThread
-    fun getRate(): Float = player.playbackSpeed
+    fun getRate(): Float = player?.playbackSpeed ?: 1.0f
 
     @MainThread
     fun setRate(value: Float) {
-        player.playbackSpeed = value
+        player?.playbackSpeed = value
     }
 
     @MainThread
-    fun getRepeatMode(): RepeatMode = player.playerOptions.repeatMode
+    fun getRepeatMode(): RepeatMode = player?.playerOptions?.repeatMode ?: RepeatMode.ALL
 
     @MainThread
     fun setRepeatMode(value: RepeatMode) {
-        player.playerOptions.repeatMode = value
+        player?.playerOptions?.repeatMode = value
     }
 
     @MainThread
-    fun getVolume(): Float = player.volume
+    fun getVolume(): Float = player?.volume ?: 1.0f
 
     @MainThread
     fun setVolume(value: Float) {
-        player.volume = value
+        player?.volume = value
     }
 
     @MainThread
-    fun getDurationInSeconds(): Double = player.duration.toSeconds()
+    fun getDurationInSeconds(): Double = player?.duration?.toSeconds() ?: 0.0
 
     @MainThread
-    fun getPositionInSeconds(): Double = player.position.toSeconds()
+    fun getPositionInSeconds(): Double = player?.position?.toSeconds() ?: 0.0
 
     @MainThread
-    fun getBufferedPositionInSeconds(): Double = player.bufferedPosition.toSeconds()
+    fun getBufferedPositionInSeconds(): Double = player?.bufferedPosition?.toSeconds() ?: 0.0
 
     @MainThread
     fun updateMetadataForTrack(index: Int, track: Track) {
-        player.replaceItem(index, track.toAudioItem())
+        player?.replaceItem(index, track.toAudioItem())
     }
 
     @MainThread
     fun updateNotificationMetadata(title: String?, artist: String?, artwork: String?) {
-        player.notificationManager.notificationMetadata = NotificationMetadata(title, artist, artwork)
+        player?.notificationManager?.notificationMetadata = NotificationMetadata(title, artist, artwork)
     }
 
     @MainThread
     fun clearNotificationMetadata() {
-        player.notificationManager.hideNotification()
+        player?.notificationManager?.hideNotification()
     }
 
     @MainThread
     private fun observeEvents() {
         scope.launch {
-            event.stateChange.collect {
+            event?.stateChange?.collect {
                 val bundle = Bundle()
                 bundle.putInt(STATE_KEY, it.asLibState.ordinal)
                 emit(MusicEvents.PLAYBACK_STATE, bundle)
 
-                if (it == AudioPlayerState.ENDED && player.nextItem == null) {
+                if (it == AudioPlayerState.ENDED && player?.nextItem == null) {
                     Bundle().apply {
-                        putInt(TRACK_KEY, player.currentIndex)
-                        putDouble(POSITION_KEY, player.position.toSeconds())
+                        putInt(TRACK_KEY, player?.currentIndex ?: 0)
+                        putDouble(POSITION_KEY, player?.position?.toSeconds() ?: 0.0)
 
                         emit(MusicEvents.PLAYBACK_QUEUE_ENDED, this)
                         emit(MusicEvents.PLAYBACK_TRACK_CHANGED, this)
@@ -335,17 +335,17 @@ class MusicService : HeadlessJsTaskService() {
         }
 
         scope.launch {
-            event.audioItemTransition.collect {
+            event?.audioItemTransition?.collect {
                 Bundle().apply {
                     putDouble(POSITION_KEY, (it?.oldPosition ?: 0).toSeconds())
-                    putInt(NEXT_TRACK_KEY, player.currentIndex)
+                    putInt(NEXT_TRACK_KEY, player?.currentIndex ?: 0)
 
                     // correctly set the previous index on the event payload
                     var previousIndex: Int? = null
                     if (it is AudioItemTransitionReason.REPEAT) {
-                        previousIndex = player.currentIndex
-                    } else if (player.previousItem != null) {
-                        previousIndex = player.previousIndex
+                        previousIndex = player?.currentIndex
+                    } else if (player?.previousItem != null) {
+                        previousIndex = player?.previousIndex
                     }
 
                     if (previousIndex != null) {
@@ -358,7 +358,7 @@ class MusicService : HeadlessJsTaskService() {
         }
 
         scope.launch {
-            event.onAudioFocusChanged.collect {
+            event?.onAudioFocusChanged?.collect {
                 Bundle().apply {
                     putBoolean(IS_FOCUS_LOSS_PERMANENT_KEY, it.isFocusLostPermanently)
                     putBoolean(IS_PAUSED_KEY, it.isPaused)
@@ -368,7 +368,7 @@ class MusicService : HeadlessJsTaskService() {
         }
 
         scope.launch {
-            event.notificationStateChange.collect {
+            event?.notificationStateChange?.collect {
                 when (it) {
                     is NotificationState.POSTED -> {
                         startForeground(it.notificationId, it.notification)
@@ -381,7 +381,7 @@ class MusicService : HeadlessJsTaskService() {
         }
 
         scope.launch {
-            event.onMediaSessionCallbackTriggered.collect {
+            event?.onMediaSessionCallbackTriggered?.collect {
                 when (it) {
                     is MediaSessionCallback.RATING -> {
                         Bundle().apply {
@@ -419,7 +419,7 @@ class MusicService : HeadlessJsTaskService() {
         }
 
         scope.launch {
-            event.onPlaybackMetadata.collect {
+            event?.onPlaybackMetadata?.collect {
                 Bundle().apply {
                     putString("source", it.source)
                     putString("title", it.title)
@@ -456,7 +456,7 @@ class MusicService : HeadlessJsTaskService() {
         super.onTaskRemoved(rootIntent)
 
         if (stoppingAppPausesPlayback) {
-            player.pause()
+            player?.pause()
         }
     }
 
@@ -468,7 +468,7 @@ class MusicService : HeadlessJsTaskService() {
     @MainThread
     override fun onDestroy() {
         super.onDestroy()
-        player.stop()
+        player?.stop()
     }
 
     @MainThread
